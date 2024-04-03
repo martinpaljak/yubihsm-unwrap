@@ -165,7 +165,6 @@ public class Main {
         if (!Arrays.equals(random, decrypted)) {
             throw new IllegalArgumentException("Public key and private key mismatch!");
         }
-        System.out.println("Private and public key match");
         return privkey;
     }
 
