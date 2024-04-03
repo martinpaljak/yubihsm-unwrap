@@ -32,6 +32,8 @@ import java.util.Arrays;
 import java.util.Base64;
 
 public class Main {
+    static final int YHW_HEADER_LEN = 59;
+
     public static void main(String[] args) throws Exception {
 
         if (args.length < 3) {
@@ -96,32 +98,32 @@ public class Main {
         int complen = len / 2;
 
         // Remove header - we don't need anything from there.
-        byte[] header = Arrays.copyOf(blob, 59);
-        byte[] payload = Arrays.copyOfRange(blob, 59, blob.length);
+        byte[] header = Arrays.copyOf(blob, YHW_HEADER_LEN);
+        byte[] payload = Arrays.copyOfRange(blob, YHW_HEADER_LEN, blob.length);
 
         int offset = 0;
         byte[] prime1b = Arrays.copyOfRange(payload, offset, offset + complen);
-        offset += 128;
+        offset += complen;
         BigInteger p = new BigInteger(1, prime1b);
 
         byte[] prime2b = Arrays.copyOfRange(payload, offset, offset + complen);
-        offset += 128;
+        offset += complen;
         BigInteger q = new BigInteger(1, prime2b);
 
         byte[] exp1b = Arrays.copyOfRange(payload, offset, offset + complen);
-        offset += 128;
+        offset += complen;
         BigInteger dp = new BigInteger(1, exp1b);
 
         byte[] exp2b = Arrays.copyOfRange(payload, offset, offset + complen);
-        offset += 128;
+        offset += complen;
         BigInteger dq = new BigInteger(1, exp2b);
 
         byte[] coefb = Arrays.copyOfRange(payload, offset, offset + complen);
-        offset += 128;
+        offset += complen;
         BigInteger c = new BigInteger(1, coefb);
 
         byte[] modulusb = Arrays.copyOfRange(payload, offset, offset + len);
-        offset += 256;
+        offset += len;
         BigInteger n = new BigInteger(1, modulusb);
 
         byte[] remaining = Arrays.copyOfRange(payload, offset, payload.length);
