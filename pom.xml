@@ -5,7 +5,7 @@
     <groupId>com.github.martinpaljak</groupId>
     <packaging>jar</packaging>
     <artifactId>yubihsm-unwrap</artifactId>
-    <version>23.12.07</version>
+    <version>24.04.04</version>
     <name>yubihsm-unwrap</name>
     <description>Unwrap yubihsm wrapped keys</description>
     <properties>
@@ -13,6 +13,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <!-- GH Actions fails sometimes on first try -->
         <maven.wagon.http.retryHandler.count>2</maven.wagon.http.retryHandler.count>
+        <project.build.outputTimestamp>${git.commit.time}</project.build.outputTimestamp>
     </properties>
     <dependencies>
         <dependency>
@@ -44,6 +45,24 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>io.github.git-commit-id</groupId>
+                <artifactId>git-commit-id-maven-plugin</artifactId>
+                <version>8.0.2</version>
+                <executions>
+                    <execution>
+                        <id>get-git-timestamp</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>revision</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <dateFormatTimeZone>UTC</dateFormatTimeZone>
+                    <injectAllReactorProjects>true</injectAllReactorProjects>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
