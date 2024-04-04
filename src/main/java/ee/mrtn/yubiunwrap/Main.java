@@ -36,15 +36,14 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
 
-        if (args.length < 3) {
-            System.err.println("Usage: java -jar yubihsm-unwrap.jar <pubkey> <wrapped> <wrapkey> [output]");
+        if (args.length < 2) {
+            System.err.println("Usage: java -jar yubihsm-unwrap.jar <wrapped> <wrapkey> [output]");
             System.exit(1);
         }
 
         // Get arguments
-        PublicKey pub = pem2PublicKey(Files.newInputStream(Paths.get(args[0])));
-        byte[] blob = Base64.getDecoder().decode(Files.readString(Paths.get(args[1])).trim());
-        byte[] key = Hex.decode(Files.readString(Paths.get(args[2])).trim());
+        byte[] blob = Base64.getDecoder().decode(Files.readString(Paths.get(args[0])).trim());
+        byte[] key = Hex.decode(Files.readString(Paths.get(args[1])).trim());
 
         Security.addProvider(new BouncyCastleProvider());
 
@@ -52,7 +51,7 @@ public class Main {
         byte[] unwrap = unwrap(blob, key);
 
         // Extract the private key from blob
-        RSAPrivateKey priv = blob2rsa(unwrap, pub);
+        RSAPrivateKey priv = blob2rsa(unwrap);
 
         // As the optional passphrase
         char[] pass = System.console().readPassword("Key export password (optional): ");
@@ -64,8 +63,8 @@ public class Main {
             pemWriter.writeObject(new JcaPKCS8Generator(priv, protection));
         }
 
-        if (args.length == 4) {
-            Files.writeString(Paths.get(args[3]), privpem.toString());
+        if (args.length == 3) {
+            Files.writeString(Paths.get(args[2]), privpem.toString());
         } else {
             System.out.println(privpem);
         }
@@ -80,25 +79,34 @@ public class Main {
         byte[] cipherTextWithTag = Arrays.copyOfRange(payload, 13, payload.length);
 
         aesccm.init(Cipher.DECRYPT_MODE, new javax.crypto.spec.SecretKeySpec(key, "AES"), new GCMParameterSpec(128, iv));
-
         return aesccm.doFinal(cipherTextWithTag);
     }
 
 
-    static RSAPrivateKey blob2rsa(byte[] blob, PublicKey pubkey) throws GeneralSecurityException, IOException {
-        if (!(pubkey instanceof RSAPublicKey))
-            throw new IllegalArgumentException("Only RSA keys supported");
+    static RSAPrivateKey blob2rsa(byte[] blob) throws GeneralSecurityException, IOException {
 
-        RSAPublicKey rsapub = (RSAPublicKey) pubkey;
-        // Extract components from blob
-        BigInteger e = rsapub.getPublicExponent();
+        // Get type from header
+        byte[] header = Arrays.copyOf(blob, YHW_HEADER_LEN);
 
-        // Lengths of components
-        int len = rsapub.getModulus().bitLength() / 8;
+        // 2048, 3072 and 4096 bit RSA keys are supported
+        int algo = header[16] & 0xff;
+        final int len;
+        switch (algo) {
+            case 9:
+                len = 256;
+                break;
+            case 10:
+                len = 384;
+                break;
+            case 11:
+                len = 512;
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported algorithm: " + algo);
+        }
         int complen = len / 2;
 
-        // Remove header - we don't need anything from there.
-        byte[] header = Arrays.copyOf(blob, YHW_HEADER_LEN);
+
         byte[] payload = Arrays.copyOfRange(blob, YHW_HEADER_LEN, blob.length);
 
         int offset = 0;
@@ -130,10 +138,8 @@ public class Main {
         if (remaining.length != 0)
             throw new IllegalArgumentException("Remaining bytes in input");
 
-        // In theory we can omit public key and assume 0x10001 to construct everything, but let's be strict
-        if (!n.equals(rsapub.getModulus())) {
-            throw new IllegalArgumentException("Modulus of public key and private key don't match");
-        }
+        // Default exponent
+        BigInteger e = BigInteger.valueOf(65537); // 0x10001
 
         // Calculate private exponent from CRT components, d = e^-1 mod (p-1)(q-1)
         BigInteger d = n;
@@ -143,10 +149,12 @@ public class Main {
         d = d.modInverse(e);
 
         RSAPrivateCrtKeySpec spec = new RSAPrivateCrtKeySpec(n, e, d, p, q, dp, dq, c);
+        RSAPublicKeySpec pubspec = new RSAPublicKeySpec(n, e);
 
-        // Create private key
+        // Create keys
         KeyFactory factory = KeyFactory.getInstance("RSA", "BC");
         RSAPrivateCrtKey privkey = (RSAPrivateCrtKey) factory.generatePrivate(spec);
+        RSAPublicKey pubkey = (RSAPublicKey) factory.generatePublic(pubspec);
 
         // Verify keypair
 
@@ -169,24 +177,4 @@ public class Main {
         }
         return privkey;
     }
-
-
-    // Get a public key from a PEM file, either public key or keypair
-    public static PublicKey pem2PublicKey(InputStream in) throws IOException {
-        try (PEMParser pem = new PEMParser(new InputStreamReader(in, StandardCharsets.US_ASCII))) {
-            Object ohh = pem.readObject();
-            if (ohh instanceof PEMKeyPair kp) {
-                return new JcaPEMKeyConverter().getKeyPair(kp).getPublic();
-            } else if (ohh instanceof SubjectPublicKeyInfo) {
-                return new JcaPEMKeyConverter().getPublicKey((SubjectPublicKeyInfo) ohh);
-            } else if (ohh instanceof X509CertificateHolder certHolder) {
-                try {
-                    return new JcaX509CertificateConverter().getCertificate(certHolder).getPublicKey();
-                } catch (CertificateException ce) {
-                    throw new IllegalArgumentException("Can not read PEM: " + ce.getMessage());
-                }
-            } else throw new IllegalArgumentException("Not supported: " + ohh.getClass().getSimpleName());
-        }
-    }
-
 }
